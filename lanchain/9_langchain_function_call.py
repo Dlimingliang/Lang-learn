@@ -34,27 +34,29 @@ def langchain_function_call_test():
     prompt = ChatPromptTemplate.from_messages([("system", "你是一个友好的助手"),
                                                ("human", "{input}")
                                                ])
-    print(f"prompt: {prompt}")
+    #print(f"prompt: {prompt}")
 
     # 3. 绑定函数
     weather_function = convert_to_openai_tool(WeatherSearch)
-    print(f"weather_function: {weather_function}")
+    #print(f"weather_function: {weather_function}")
     model_with_function = model.bind(tools=[weather_function])
 
     chain = prompt | model_with_function
 
     # 4. 调用大模型
     # response 是 AIMessage 对象，包含结构化数据
-    response = chain.invoke({"input": "大连天气怎么样?"})
-    print(f"response: {response}")
+    text = "大连天气怎么样?"
+    print(f"用户提问:{text}")
+    response = chain.invoke({"input": text})
+    #print(f"response: {response}")
 
 
     # 5. 从大模型中读取函数并且调用
     if response.tool_calls:
         for tool_call in response.tool_calls:
-            print(f"name: {tool_call['name']}")
-            print(f"args: {tool_call['args']}")
-            print(f"id: {tool_call.get('id', 'N/A')}")
+            #print(f"name: {tool_call['name']}")
+            #print(f"args: {tool_call['args']}")
+            #print(f"id: {tool_call.get('id', 'N/A')}")
 
             # 执行函数调用
             if tool_call['name'] == 'WeatherSearch':
@@ -66,10 +68,9 @@ def langchain_function_call_test():
 
                 # 6. 将返回结果一起扔给大模型
                 from langchain_core.messages import HumanMessage, AIMessage, ToolMessage
-
                 # 构建包含工具调用结果的消息
                 messages = [
-                    HumanMessage(content="大连天气怎么样?"),
+                    HumanMessage(content=text),
                     response,  # 包含 tool_calls 的 AI 响应
                     ToolMessage(
                         content=weather_result,
@@ -79,7 +80,7 @@ def langchain_function_call_test():
                 
                 # 再次调用模型获取最终回复
                 final_response = model_with_function.invoke(messages)
-                print(f"\n最终回复: {final_response.content}")
+                print(f"\nAI回答: {final_response.content}")
 
 if __name__ == "__main__":
     langchain_function_call_test()
