@@ -6,6 +6,8 @@ from langchain_core.output_parsers.openai_tools import JsonOutputToolsParser
 from langchain_core.output_parsers.openai_tools import JsonOutputKeyToolsParser
 from typing import Optional, List
 from langchain_community.document_loaders.web_base import WebBaseLoader
+from langchain_text_splitters import RecursiveCharacterTextSplitter
+from langchain_core.runnables.base import RunnableLambda
 
 class Overview(BaseModel):
     """Overview of a section of text."""
@@ -22,10 +24,15 @@ class Info(BaseModel):
     """Information to extract"""
     papers: List[Paper]
 
+def flatten(matrix):
+    flat_list = []
+    for row in matrix:
+        flat_list += row
+    return flat_list
+
 def web_extraction_test():
     loader = WebBaseLoader("https://lilianweng.github.io/posts/2023-06-23-agent/")
     documents = loader.load()
-    page_content = documents[0].page_content[:100000]
 
     model = ChatOpenAI(
         model=config["model"],
@@ -55,12 +62,18 @@ def web_extraction_test():
     ])
 
     extraction_model = model.bind_tools([Info], tool_choice="Info")
-    extraction_chain = prompt | extraction_model | JsonOutputKeyToolsParser(key_name="Info", first_tool_only=True)
-    response = extraction_chain.invoke({"input": page_content})
-    print(response)
+    extraction_chain = prompt | extraction_model | JsonOutputToolsParser()
+    # response = extraction_chain.invoke({"input": page_content})
+    # print(response)
 
     # 文件太大了，我们进行文件分割，并且并行执行
-
+    text_splitter = RecursiveCharacterTextSplitter(chunk_overlap=0)
+    prep = RunnableLambda(
+        lambda x: [{"input": doc} for doc in text_splitter.split_text(x)]
+    )
+    chain = prep | extraction_chain.map() | flatten
+    response = chain.invoke(documents[0].page_content)
+    print(response)
 
 class Tagging(BaseModel):
     """Tag the piece of text with particular info."""
