@@ -5,6 +5,61 @@ from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers.openai_tools import JsonOutputToolsParser
 from langchain_core.output_parsers.openai_tools import JsonOutputKeyToolsParser
 from typing import Optional, List
+from langchain_community.document_loaders.web_base import WebBaseLoader
+
+class Overview(BaseModel):
+    """Overview of a section of text."""
+    summary: str = Field(description="Provide a concise summary of the content.")
+    language: str = Field(description="Provide the language that the content is written in.")
+    keywords: str = Field(description="Provide keywords related to the content.")
+
+class Paper(BaseModel):
+    """Information about papers mentioned."""
+    title: str
+    author: Optional[str]
+
+class Info(BaseModel):
+    """Information to extract"""
+    papers: List[Paper]
+
+def web_extraction_test():
+    loader = WebBaseLoader("https://lilianweng.github.io/posts/2023-06-23-agent/")
+    documents = loader.load()
+    page_content = documents[0].page_content[:100000]
+
+    model = ChatOpenAI(
+        model=config["model"],
+        temperature=0,
+        base_url=config["baseUrl"],  # 你的baseUrl
+        api_key=config["apiKey"],  # 你的apiKey
+    )
+
+    # prompt = ChatPromptTemplate.from_messages([
+    #     ("system", "Extract the relevant information, if not explicitly provided do not guess. Extract partial info"),
+    #     ("human", "{input}")
+    # ])
+    # 生成摘要
+    #extraction_model = model.bind_tools([Overview], tool_choice="Overview")
+    #extraction_chain = prompt | extraction_model | JsonOutputToolsParser()
+    #response = extraction_chain.invoke({"input": page_content})
+    #print(response)
+    # 提取作者
+
+    template = """A article will be passed to you. Extract from it all papers that are mentioned by this article follow by its author. 
+    Do not extract the name of the article itself. If no papers are mentioned that's fine - you don't need to extract any! Just return an empty list.
+    Do not make up or guess ANY extra information. Only extract what exactly is in the text."""
+
+    prompt = ChatPromptTemplate.from_messages([
+        ("system", template),
+        ("human", "{input}")
+    ])
+
+    extraction_model = model.bind_tools([Info], tool_choice="Info")
+    extraction_chain = prompt | extraction_model | JsonOutputKeyToolsParser(key_name="Info", first_tool_only=True)
+    response = extraction_chain.invoke({"input": page_content})
+    print(response)
+
+    # 文件太大了，我们进行文件分割，并且并行执行
 
 
 class Tagging(BaseModel):
@@ -75,4 +130,5 @@ def extraction_test():
 
 if __name__ == '__main__':
     # tagging_test()
-    extraction_test()
+    # extraction_test()
+    web_extraction_test()
