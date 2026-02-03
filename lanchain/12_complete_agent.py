@@ -68,15 +68,67 @@ def chat_agent():
         base_url=config["baseUrl"],  # 你的baseUrl
         api_key=config["apiKey"],  # 你的apiKey
     )
-    tool_llm = llm.bind_tools([search_wikipedia,get_current_temperature])
+    
+    # 定义工具列表
+    tools = [search_wikipedia, get_current_temperature]
+    
+    # 创建工具名称到工具的映射
+    tool_map = {tool.name: tool for tool in tools}
+    
+    # 绑定工具到llm
+    tool_llm = llm.bind_tools(tools)
 
     # 创建提示词模板
     prompt = ChatPromptTemplate.from_messages(
         [
-            ("system", "你是一个小助手"),
-            ("user","{input}"),
+            ("system", """你是一个智能助手，可以帮助用户查询天气和搜索维基百科信息。"""),
+            MessagesPlaceholder(variable_name="chat_history"),
+            ("user", "{input}"),
+            MessagesPlaceholder(variable_name="agent_scratchpad"),
         ]
     )
+    
+    # 创建chain
+    chain = prompt | tool_llm
+    
+    # Agent循环
+    user_input = "帮我搜索李凯"
+    chat_history = []
+    agent_scratchpad = []
+    print(f"\n🧑 输入: {user_input}")
+    while True:
+        # 调用LLM
+        response = chain.invoke({"input": user_input, "chat_history": chat_history, "agent_scratchpad":agent_scratchpad})
+        
+        # 检查是否有工具调用
+        if response.tool_calls:
+            print(f"\n🤖 模型决定调用工具...")
+            
+            # 将AI的响应添加到历史
+            agent_scratchpad.append(response)
+            
+            # 执行所有工具调用
+            for tool_call in response.tool_calls:
+                tool_name = tool_call["name"]
+                tool_args = tool_call["args"]
+                print(f"   📍 调用工具: {tool_name}")
+                print(f"   📍 参数: {tool_args}")
+                
+                # 执行工具
+                tool_result = tool_map[tool_name].invoke(tool_args)
+                print(f"   ✅ 工具返回: {tool_result}")
+                
+                # 将工具结果添加到历史
+                from langchain_core.messages import ToolMessage
+                tool_message = ToolMessage(
+                    content=str(tool_result),
+                    tool_call_id=tool_call["id"]
+                )
+                agent_scratchpad.append(tool_message)
+        else:
+            # 没有工具调用，直接输出结果
+            print(f"\n🎯 模型最终回答: {response.content}")
+            break
 
 
 if __name__ == '__main__':
